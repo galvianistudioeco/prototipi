@@ -6,7 +6,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "devDependencies": {
-    "@types/node": "^20.1.5"
+    "@jgoz/esbuild-plugin-typecheck": "^3.0.2",
+    "@types/node": "^20.1.5",
+    "esbuild": "^0.17.19",
+    "esbuild-plugin-copy": "^2.1.1"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

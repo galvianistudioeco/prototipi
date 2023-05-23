@@ -1,0 +1,11 @@
+{
+  "name": "player",
+  "version": "1.0.0",
+  "description": "La web app che fa anche da player dei corsi",
+  "main": "index.js",
+  "scripts": {
+    "build": "node debug.mjs"
+  },
+  "author": "",
+  "license": "ISC"
+}
