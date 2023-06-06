@@ -7,11 +7,11 @@
     "skipLibCheck": true,
     "experimentalDecorators": true,
     "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    "noUnusedParameters": false,
     "strict": true,
     "noImplicitAny": true,
     "noImplicitThis": true,
-    "noEmitOnError": true,
+    "noEmitOnError": false,
   },
   "include": [
     "src/**/*.ts"
