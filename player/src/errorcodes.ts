@@ -13,6 +13,7 @@ enum ScormErrorCodes {
     Incorrect_Data_Type = 405, // LMSSetValue was called with a value that is not consistent with the data format of the supplied data model element.
 }
 
+
 class ScormError extends Error {
     static is(err: any): err is ScormError {
         return (err instanceof ScormError)

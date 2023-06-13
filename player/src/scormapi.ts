@@ -1,6 +1,8 @@
 import { ScormErrorCodes, ScormError } from "./errorcodes"
 
 import Joi from "joi"
+import axios from 'axios';
+import { ScormAPIResponse } from "./scormapireponse";
 
 interface IAPIScorm {
     LMSInitialize(): string
@@ -63,6 +65,11 @@ class ScormAPI {
             },
             LMSCommit: () => {
                 try {
+                    // Scorm non gestiscela chiamata asincrona sul commit,
+                    //       quindi assumiamo che commit torni sempre TRUE,
+                    //       che l'errore del commit venga salvato per essere
+                    //       gestito alla prossima chiamata API(qualsiasi) ed eventualmente
+                    //       gestito al ritorno della chiamata asyncrona
                     this.commit()
                 }
                 catch (err) {
@@ -87,21 +94,29 @@ class ScormAPI {
 
     init() {
         // Legge e imposta this.state dal DB?
+        // get da localStorage se esiste altrimenti da DB.
         this.state = {}
     }
 
     setValue(key: string, value: string): void {
+        console.log("Lo state è", this.state)
         if (this.state === undefined) {
             throw new ScormError(ScormErrorCodes.Not_initialized)
         }
 
-        const validated_value = this.validateValue(key, value, ValidateModes.SET)
+        const validated_value = this.validateKeyValue(key, value, ValidateModes.SET)
 
-        this.state[key as string] = validated_value
+        this.state[key as string] = validated_value!
         //ritorna true se tutto è andato bene dopo aver valutato se key e value sono coerenti
     }
 
-    validateValue(key: string, value: string, mode: ValidateModes) {
+    validateKeyValue(key: string, value: string | undefined, mode: ValidateModes) {
+        if (this.last_error) {
+            throw this.last_error
+        }
+        if (mode == ValidateModes.SET && value === undefined) {
+            throw new ScormError(ScormErrorCodes.Invalid_set_value, "Value non è valorizzato.")
+        }
         if (key === "cmi.core.lesson_location") {
             // (CMIString (SPM: 255), RW) The learner’s current location in the SCO
             if (mode == ValidateModes.SET) {
@@ -119,7 +134,8 @@ class ScormAPI {
             if (mode == ValidateModes.SET)
                 throw new ScormError(ScormErrorCodes.Element_is_read_only, `Key "${key}" is readonly.`)
         } else {
-            throw new ScormError(ScormErrorCodes.Invalid_argument_error, `Key "${key}" is ivalid.`)
+            // A scopo didattico non gestiamo l'evento key non supportato.
+            // throw new ScormError(ScormErrorCodes.Invalid_argument_error, `Key "${key}" is ivalid.`)
         }
         return value
     }
@@ -127,11 +143,51 @@ class ScormAPI {
     getValue(key: string): string {
         if (this.state === undefined)
             throw new Error("API Init non è stato chiamato.")
+
+        this.validateKeyValue(key, undefined, ValidateModes.GET)
+
         return this.state[key]
     }
 
-    commit() {
-        // Salvataggio dello this.state nel DB?        
+    async commit() {
+        // Salvataggio dello this.state nel DB?   
+        try {
+            const ret = await axios.post('http://127.0.0.1:3000/testers/commit.php', this.state, {
+                withCredentials: true
+            })
+            /*if (ret.status == 0) {
+                setTimeout(this.commit, 1000)
+                return
+            }*/
+            if (ret.status != 200) {
+                throw new Error("Risposta del server non è 200 ma " + ret.status + ": " + ret.statusText)
+            }
+            console.log("AXIOS Returns", ret.data)
+            const responseData = ret.data as ScormAPIResponse
+            if (responseData.errorMessage)
+                throw new Error("Risposta del server 200 ma c'è un errore interno. " + ret.data.errorMessage)
+
+        } catch (err: any) {
+            this.last_error = new ScormError(ScormErrorCodes.General_Exception, err.message)
+            // Redirect della pagina con un messaggio di errore
+            // "Comunicazione interrotta con il sever" -> Logout.html
+            console.error("ERRORE CRITICO", err)
+            console.error("DOBBIAMO A QUESTO PUNTO CHIAMARE IL LOGOUT")
+
+            document.getElementsByTagName('body')[0].innerHTML = "CORSO CHIUSO per errore!"
+        }
+
+        /*.then(function(response) {
+            // handle success
+            console.log(response);
+        })
+        .catch(function(error) {
+            // handle error
+            console.log(error);
+        })
+        .finally(function() {
+            // always executed
+        });*/
     }
 
     finish() {
