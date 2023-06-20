@@ -1,0 +1,18 @@
+POST http://localhost:3001/commit HTTP/1.1
+Content-Type: application/json
+
+{
+    "cmi.core.lesson_location":"Pagina 4",
+    "cmi.core.lesson_status":"completed"
+}
+###
+GET http://localhost:3001/init HTTP/1.1
+###
+POST https://google.com HTTP/1.1
+Content-Type: application/json
+
+{
+    "test": true
+}
+###
+GET https://google.com HTTP/1.1

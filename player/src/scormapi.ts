@@ -2,7 +2,8 @@ import { ScormErrorCodes, ScormError } from "./errorcodes"
 
 import Joi from "joi"
 import axios from 'axios';
-import { ScormAPIResponse } from "./scormapireponse";
+import { ScormAPIResponse, ScormState } from "./scormapireponse";
+import { Player } from "./player";
 
 interface IAPIScorm {
     LMSInitialize(): string
@@ -30,10 +31,9 @@ enum ValidateModes {
 
 class ScormAPI {
     private last_error?: ScormError = undefined
-    private state?: {
-        [key: string]: string
-    }
-    constructor() {
+    private state?: ScormState
+    private saved_state?: ScormState
+    constructor(private readonly player: Player) {
         const api: IAPIScorm = {
             LMSInitialize: () => {
                 this.init()
@@ -44,6 +44,7 @@ class ScormAPI {
                     return this.getValue(key)
                 }
                 catch (err) {
+                    this.player.closeCourseForError()   
                     console.error(err)
                     return "false"
                 }
@@ -59,6 +60,7 @@ class ScormAPI {
                         this.last_error = new ScormError(ScormErrorCodes.General_Exception, err.message)
                     }
                     console.error("Error:", this.last_error.code, this.last_error.message)
+                    this.player.closeCourseForError()   
                     return "false"
                 }
                 return "true"
@@ -74,6 +76,7 @@ class ScormAPI {
                 }
                 catch (err) {
                     console.error(err)
+                    this.player.closeCourseForError()   
                     return "false"
                 }
                 return "true"
@@ -84,6 +87,7 @@ class ScormAPI {
                 }
                 catch (err) {
                     console.error(err)
+                    this.player.closeCourseForError()   
                     return "false"
                 }
                 return "true"
@@ -91,15 +95,34 @@ class ScormAPI {
         }
         window.API = api
     }
+    async preloadState() {
+        try {
+            const ret = await axios.get<ScormAPIResponse>('http://127.0.0.1:3001/init')
+            if (ret.status != 200) {
+                throw new Error("Risposta del server non è 200 ma " + ret.status + ": " + ret.statusText)
+            }
+            console.log("AXIOS Returns", ret.data)
+            const responseData = ret.data
+            if (responseData.errorMessage)
+                throw new Error("Risposta del server 200 ma c'è un errore interno. " + ret.data.errorMessage)
 
-    init() {
-        // Legge e imposta this.state dal DB?
-        // get da localStorage se esiste altrimenti da DB.
-        this.state = {}
+            this.saved_state = responseData.state || {}
+
+        } catch (err: any) {
+            this.last_error = new ScormError(ScormErrorCodes.General_Exception, err.message)
+            return false
+        }
+        return true
     }
 
-    setValue(key: string, value: string): void {
-        console.log("Lo state è", this.state)
+    init() {
+        if (this.last_error) {
+            throw this.last_error
+        }
+        this.state = this.saved_state || {}
+    }
+
+    setValue(key: string, value: string): void {        
         if (this.state === undefined) {
             throw new ScormError(ScormErrorCodes.Not_initialized)
         }
@@ -107,6 +130,8 @@ class ScormAPI {
         const validated_value = this.validateKeyValue(key, value, ValidateModes.SET)
 
         this.state[key as string] = validated_value!
+
+        console.log("Lo state è", this.state)
         //ritorna true se tutto è andato bene dopo aver valutato se key e value sono coerenti
     }
 
@@ -141,8 +166,8 @@ class ScormAPI {
     }
 
     getValue(key: string): string {
-        if (this.state === undefined)
-            throw new Error("API Init non è stato chiamato.")
+        if (this.state === undefined) 
+            throw new Error("API Init non è stato chiamato.")        
 
         this.validateKeyValue(key, undefined, ValidateModes.GET)
 
@@ -152,9 +177,9 @@ class ScormAPI {
     async commit() {
         // Salvataggio dello this.state nel DB?   
         try {
-            const ret = await axios.post('http://127.0.0.1:3000/testers/commit.php', this.state, {
+            const ret = await axios.post<ScormAPIResponse>('http://127.0.0.1:3001/commit', this.state/*, {
                 withCredentials: true
-            })
+            }*/)
             /*if (ret.status == 0) {
                 setTimeout(this.commit, 1000)
                 return
@@ -163,7 +188,7 @@ class ScormAPI {
                 throw new Error("Risposta del server non è 200 ma " + ret.status + ": " + ret.statusText)
             }
             console.log("AXIOS Returns", ret.data)
-            const responseData = ret.data as ScormAPIResponse
+            const responseData = ret.data
             if (responseData.errorMessage)
                 throw new Error("Risposta del server 200 ma c'è un errore interno. " + ret.data.errorMessage)
 
@@ -173,8 +198,7 @@ class ScormAPI {
             // "Comunicazione interrotta con il sever" -> Logout.html
             console.error("ERRORE CRITICO", err)
             console.error("DOBBIAMO A QUESTO PUNTO CHIAMARE IL LOGOUT")
-
-            document.getElementsByTagName('body')[0].innerHTML = "CORSO CHIUSO per errore!"
+            this.player.closeCourseForError()
         }
 
         /*.then(function(response) {
@@ -191,7 +215,12 @@ class ScormAPI {
     }
 
     finish() {
+        if (this.last_error) {
+            this.player.closeCourseForError()   
+            throw this.last_error
+        }
         // Eseguo il Dispose dell'api e non può essere più utilizzata se non si effettua un nuovo Init
+        this.saved_state = this.state
         this.state = undefined
     }
 }
