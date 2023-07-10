@@ -11,6 +11,7 @@ interface IAPIScorm {
     LMSSetValue(key: string, value: string): string
     LMSCommit(): string
     LMSFinish(): string
+    LMSGetLastError(): number
 }
 
 
@@ -33,10 +34,21 @@ class ScormAPI {
     private last_error?: ScormError = undefined
     private state?: ScormState
     private saved_state?: ScormState
-    constructor(private readonly player: Player) {
+    constructor(private readonly player: Player, target: Window) {
         const api: IAPIScorm = {
             LMSInitialize: () => {
-                this.init()
+                try {
+                    // Scorm non gestiscela chiamata asincrona sul commit,
+                    //       quindi assumiamo che commit torni sempre TRUE,
+                    //       che l'errore del commit venga salvato per essere
+                    //       gestito alla prossima chiamata API(qualsiasi) ed eventualmente
+                    //       gestito al ritorno della chiamata asyncrona
+                    this.init()
+                } catch (err) {
+                    console.error(err)
+                    this.player.closeCourseForError()
+                    return "false"
+                }
                 return "true"
             },
             LMSGetValue: (key: string) => {
@@ -44,7 +56,7 @@ class ScormAPI {
                     return this.getValue(key)
                 }
                 catch (err) {
-                    this.player.closeCourseForError()   
+                    this.player.closeCourseForError()
                     console.error(err)
                     return "false"
                 }
@@ -60,7 +72,7 @@ class ScormAPI {
                         this.last_error = new ScormError(ScormErrorCodes.General_Exception, err.message)
                     }
                     console.error("Error:", this.last_error.code, this.last_error.message)
-                    this.player.closeCourseForError()   
+                    this.player.closeCourseForError()
                     return "false"
                 }
                 return "true"
@@ -76,7 +88,7 @@ class ScormAPI {
                 }
                 catch (err) {
                     console.error(err)
-                    this.player.closeCourseForError()   
+                    this.player.closeCourseForError()
                     return "false"
                 }
                 return "true"
@@ -87,13 +99,16 @@ class ScormAPI {
                 }
                 catch (err) {
                     console.error(err)
-                    this.player.closeCourseForError()   
+                    this.player.closeCourseForError()
                     return "false"
                 }
                 return "true"
+            },
+            LMSGetLastError: () => {
+                return this.last_error?.code || 0
             }
         }
-        window.API = api
+        target.API = api
     }
     async preloadState() {
         try {
@@ -119,10 +134,13 @@ class ScormAPI {
         if (this.last_error) {
             throw this.last_error
         }
+
         this.state = this.saved_state || {}
+
+        return "true"
     }
 
-    setValue(key: string, value: string): void {        
+    setValue(key: string, value: string): void {
         if (this.state === undefined) {
             throw new ScormError(ScormErrorCodes.Not_initialized)
         }
@@ -145,7 +163,7 @@ class ScormAPI {
         if (key === "cmi.core.lesson_location") {
             // (CMIString (SPM: 255), RW) The learner’s current location in the SCO
             if (mode == ValidateModes.SET) {
-                const validation = Joi.string().max(255).required().validate(value, {
+                const validation = Joi.string().max(255).required().allow("").validate(value, {
                     abortEarly: true
                 })
                 if (validation.error) {
@@ -166,8 +184,8 @@ class ScormAPI {
     }
 
     getValue(key: string): string {
-        if (this.state === undefined) 
-            throw new Error("API Init non è stato chiamato.")        
+        if (this.state === undefined)
+            throw new Error("API Init non è stato chiamato.")
 
         this.validateKeyValue(key, undefined, ValidateModes.GET)
 
@@ -216,7 +234,7 @@ class ScormAPI {
 
     finish() {
         if (this.last_error) {
-            this.player.closeCourseForError()   
+            this.player.closeCourseForError()
             throw this.last_error
         }
         // Eseguo il Dispose dell'api e non può essere più utilizzata se non si effettua un nuovo Init

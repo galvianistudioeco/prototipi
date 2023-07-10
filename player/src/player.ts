@@ -30,7 +30,7 @@ export class Player {
     async initScormAPI() {
         // Crea l'oggetto window.API e lo rendeusabile dal corso
         if (this.scorm_api === undefined) {
-            this.scorm_api = new ScormAPI(this)
+            this.scorm_api = new ScormAPI(this, window)
 
             // Se il preload dello state dal DB non riesce allora torniamo FALSE
             return await this.scorm_api.preloadState()
@@ -41,6 +41,6 @@ export class Player {
 
 
 const player = new Player()
-player.loadCourse("../../course/dist/course.html")
+player.loadCourse("../../course/dist/E2921/default.html?t=swColdiretti&u=ud01")
 
 

@@ -1,0 +1,15 @@
+{
+    "titolo": "Corso per il corso Typescript",
+    "domanda1": {
+        "titolo": "sdfdsf",
+        "risposte": {
+            "A": {
+                "testo": "pippo",
+                "corretta": true
+            },
+            "B": {
+                "testo": "pippo"
+            }
+        }
+    }
+}

@@ -1,0 +1,7 @@
+body{
+    display: unset !important;
+}
+
+.template {
+    display: none;
+}
